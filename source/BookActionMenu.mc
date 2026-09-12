@@ -1,6 +1,8 @@
 using Toybox.Application;
 using Toybox.Communications;
 using Toybox.Media;
+using Toybox.System;
+using Toybox.Timer;
 using Toybox.WatchUi;
 
 // Per-book actions, reached from PlayMenu. Resume / Play from start hand the
@@ -32,12 +34,16 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
     private var mItemId;
     private var mLaunching;
     private var mCancelled;
+    private var mResumeTimer;
+    private var mDeferLiveProgress;
 
     function initialize(itemId) {
         Menu2InputDelegate.initialize();
         mItemId = itemId;
         mLaunching = false;
         mCancelled = false;
+        mResumeTimer = null;
+        mDeferLiveProgress = false;
     }
 
     function onSelect(item) {
@@ -52,6 +58,7 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
             return;
         }
         if ((id instanceof Toybox.Lang.String) && id.equals("start")) {
+            mDeferLiveProgress = false;
             launchPlayback("start");
             return;
         }
@@ -66,33 +73,61 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
         }
     }
 
-    // Pull before playback records a fresh local timestamp. This lets the
-    // existing last-write-wins merge see progress made on another device.
+    // Pull before playback starts so Resume can choose the furthest position.
     function resumePlayback() {
+        mDeferLiveProgress = false;
         if (!AbsApi.isConfigured()) {
+            launchPlayback("resume");
+            return;
+        }
+        var settings = System.getDeviceSettings();
+        if ((settings has :connectionAvailable) && !settings.connectionAvailable) {
+            mDeferLiveProgress = true;
             launchPlayback("resume");
             return;
         }
         mLaunching = true;
         Notify.flash(Rez.Strings.syncing);
+        mResumeTimer = new Timer.Timer();
+        mResumeTimer.start(method(:onResumeTimeout), 2500, false);
         try {
             AbsApi.getProgress(mItemId, method(:onResumeProgress));
         } catch (e) {
+            stopResumeTimer();
             mLaunching = false;
+            mDeferLiveProgress = true;
             launchPlayback("resume");
         }
     }
 
     function onResumeProgress(code, data) {
-        if (mCancelled) { return; }
+        if (mCancelled || !mLaunching) { return; }
+        stopResumeTimer();
         if (code == 200) {
             var pulled = AbsApi.readProgress(data);
             if (pulled != null) {
                 Progress.mergeServer(mItemId, pulled[0], pulled[1], pulled[2]);
             }
+        } else {
+            mDeferLiveProgress = true;
         }
         mLaunching = false;
         launchPlayback("resume");
+    }
+
+    function onResumeTimeout() {
+        mResumeTimer = null;
+        if (mCancelled || !mLaunching) { return; }
+        mLaunching = false;
+        mDeferLiveProgress = true;
+        launchPlayback("resume");
+    }
+
+    function stopResumeTimer() {
+        if (mResumeTimer != null) {
+            mResumeTimer.stop();
+            mResumeTimer = null;
+        }
     }
 
     function launchPlayback(mode) {
@@ -103,11 +138,16 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
         // stopPlayback arrived after our minimum API, so keep older supported
         // devices on the legacy start-only path.
         if (Media has :stopPlayback) { Media.stopPlayback(); }
-        Media.startPlayback({ "item" => mItemId, "mode" => mode });
+        Media.startPlayback({
+            "item" => mItemId,
+            "mode" => mode,
+            "deferLiveProgress" => mDeferLiveProgress
+        });
     }
 
     function onBack() {
         mCancelled = true;
+        stopResumeTimer();
         WatchUi.popView(WatchUi.SLIDE_RIGHT);
     }
 }

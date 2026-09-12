@@ -8,11 +8,10 @@ using Toybox.Time;
 //   { itemId => [ positionSec, tsSec, dirty, finished? ] }
 //
 //   positionSec  book-absolute playback position in seconds - the resume point.
-//   tsSec        when that position was set, in EPOCH SECONDS. This is the same
-//                clock ABS records as MediaProgress.lastUpdate (the sidecar
-//                converts sec<->ms at the edge), so cross-device last-write-wins
-//                is a plain numeric compare. Watch writes stamp Time.now(); a
-//                server pull carries ABS's own lastUpdate.
+//   tsSec        when that position was set, in EPOCH SECONDS. Watch writes
+//                stamp Time.now(); a server pull carries ABS's lastUpdate. It
+//                identifies matching writes and orders bestResume(), but sync
+//                conflicts are resolved by the furthest playback position.
 //   dirty        true  = written locally but not yet confirmed to ABS (must be
 //                        flushed on the next sync);
 //                false = in sync with ABS.
@@ -84,17 +83,43 @@ module Progress {
         }
     }
 
-    // Merge a position pulled from ABS, last-write-wins by tsSec: a strictly
-    // newer server value replaces ours (and is clean - no need to push it back);
-    // an equal/older one is ignored so a fresh local listen is never regressed.
+    // Merge a position pulled from ABS. The furthest position wins regardless
+    // of clock skew or write order. If the watch is farther, mark it dirty so
+    // this same sync repairs ABS even when a prior live push marked it clean.
     function mergeServer(itemId, positionSec, tsSec, finished) {
         var m = all();
         var e = m[itemId];
-        if ((e == null) || (tsSec > e[1])) {
-            // A null flag is tolerated for an older sidecar/watch protocol and
-            // preserves the local value. Current AbsApi always supplies it.
-            var f = (finished != null) ? (finished == true) : entryFinished(e);
+        var serverFinished = (finished == true);
+        if (e == null) {
+            m[itemId] = [positionSec, tsSec, false, serverFinished];
+            save(m);
+            return;
+        }
+
+        var localFinished = entryFinished(e);
+        if (serverFinished && !localFinished) {
+            m[itemId] = [positionSec, tsSec, false, true];
+            save(m);
+            return;
+        }
+        if (localFinished && !serverFinished && (finished != null)) {
+            m[itemId] = [e[0], e[1], true, true];
+            save(m);
+            return;
+        }
+
+        if (positionSec > e[0]) {
+            var f = (finished != null) ? serverFinished : localFinished;
             m[itemId] = [positionSec, tsSec, false, f];
+            save(m);
+        } else if (positionSec < e[0]) {
+            m[itemId] = [e[0], e[1], true, localFinished];
+            save(m);
+        } else {
+            var mergedTs = (tsSec > e[1]) ? tsSec : e[1];
+            var mergedFinished = localFinished || serverFinished;
+            var needsPush = localFinished && !serverFinished && (finished != null);
+            m[itemId] = [e[0], mergedTs, needsPush, mergedFinished];
             save(m);
         }
     }

@@ -232,8 +232,8 @@ module AbsApi {
 }
 
 // One app-wide live progress dispatcher. Playback callbacks can arrive faster
-// than HTTP responses (especially NOTIFY immediately followed by final
-// COMPLETE), and ABS applies PATCHes in arrival order rather than comparing
+// than HTTP responses (especially STOP around final COMPLETE), and ABS applies
+// PATCHes in arrival order rather than comparing
 // lastUpdate. Sending one at a time prevents an older ordinary position from
 // landing after isFinished:true and reopening the book. Every callback first
 // persists its latest state in Progress; the queue therefore coalesces repeated

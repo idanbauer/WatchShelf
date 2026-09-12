@@ -80,7 +80,7 @@ class ContentIterator extends Media.ContentIterator {
         ];
         profile.attemptSkipAfterThumbsDown = false;
         profile.requirePlaybackNotification = true;  // so onSong Notify fires for progress sync
-        profile.playbackNotificationThreshold = 15;  // notify every ~15s of playback
+        profile.playbackNotificationThreshold = 60;  // local progress checkpoint
         profile.skipPreviousThreshold = 3;
         // Do NOT set skipForward/BackwardTimeDelta: the system default is
         // already the 30s audiobook convention, and the SDK docs state that

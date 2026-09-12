@@ -16,6 +16,7 @@ class ContentDelegate extends Media.ContentDelegate {
     private var mResumeGuardActive;
     private var mSessionFinishedItem; // final COMPLETE is terminal for this delegate
     private var mAwaitingResetStart;   // reset-after-final clears latch on START
+    private var mDeferLiveProgress;    // offline resume waits for safe full sync
 
     // args is the payload passed to Media.startPlayback (our BookActionMenu
     // sends { item, mode }); null when playback is launched from the native
@@ -31,6 +32,7 @@ class ContentDelegate extends Media.ContentDelegate {
         mResumeGuardActive = false;
         mSessionFinishedItem = null;
         mAwaitingResetStart = false;
+        mDeferLiveProgress = (args != null) && (args["deferLiveProgress"] == true);
         setResumeGuard(mArgs);
         resetContentIterator();
     }
@@ -100,7 +102,7 @@ class ContentDelegate extends Media.ContentDelegate {
 
     // Playback events. playbackPosition is seconds WITHIN the current chapter
     // track; ABS wants book-absolute time, so we add the chunk's start offset
-    // from its book's BookStore record. We push progress on
+    // from its book's BookStore record. We checkpoint on
     // notify/pause/stop/complete using the CONFIRMED named enum
     // (Media.SONG_EVENT_PLAYBACK_NOTIFY=3, COMPLETE=4, STOP=5, PAUSE=6)
     // rather than magic numbers.
@@ -206,17 +208,17 @@ class ContentDelegate extends Media.ContentDelegate {
         if (finished) {
             mSessionFinishedItem = hit[0];
         }
-        // Persist the position LOCALLY first (survives being offline, and even
-        // an app kill mid-listen). The live push then clears the dirty flag if
-        // it reaches ABS; if it doesn't (phoneless run), it stays queued and the
-        // next sync flushes it. Same timestamp is used for both so the flush and
-        // the eventual cross-device merge agree on when this was played.
+        // Persist locally first so offline playback and app exits are safe.
+        // Pause, stop, and final completion also push when online; periodic
+        // notifications remain local until the next full sync.
         var ts = Progress.nowSec();
         Progress.record(hit[0], absolute, ts, finished);
         // The book's total duration (hit[2]) lets ABS compute a progress
         // fraction; null (older record without durations) keeps ABS's stored
         // duration.
-        if (AbsApi.isConfigured()) {
+        var shouldPush = (songEvent == Media.SONG_EVENT_PAUSE) ||
+            (songEvent == Media.SONG_EVENT_STOP) || finished;
+        if (shouldPush && AbsApi.isConfigured() && !mDeferLiveProgress) {
             LiveProgress.submit(hit[0]);
         }
     }

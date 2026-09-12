@@ -58,24 +58,29 @@ function progressRestartIsOrdinaryWrite(logger) {
 }
 
 (:test)
-function progressPullBeforeResumePreservesNewestPosition(logger) {
+function progressPullBeforeResumePreservesFurthestPosition(logger) {
     var itemId = "__watchshelf_test_resume_pull__";
     Progress.remove(itemId);
 
-    Progress.record(itemId, 120, 10, false);
-    Progress.markClean(itemId, 10, 120, false);
+    Progress.record(itemId, 120, 30, false);
+    Progress.markClean(itemId, 30, 120, false);
     Progress.mergeServer(itemId, 360, 20, false);
     var e = Progress.get(itemId);
     Test.assertEqual(e[0], 360);
-    Test.assertMessage(!e[2], "newer server progress should be clean");
+    Test.assertMessage(!e[2], "farther server progress should be clean");
 
-    Progress.record(itemId, 420, 30, false);
-    Progress.mergeServer(itemId, 360, 20, false);
+    Progress.record(itemId, 420, 10, false);
+    Progress.markClean(itemId, 10, 420, false);
+    Progress.mergeServer(itemId, 360, 40, false);
     e = Progress.get(itemId);
     Test.assertEqual(e[0], 420);
-    Test.assertMessage(e[2], "newer offline watch progress should remain dirty");
+    Test.assertMessage(e[2], "farther watch progress should be queued for upload");
+
+    Progress.mergeServer(itemId, 420, 50, false);
+    e = Progress.get(itemId);
+    Test.assertMessage(!e[2], "matching server progress should confirm the watch value");
 
     Progress.remove(itemId);
-    logger.debug("resume pull keeps the newest cross-device position");
+    logger.debug("resume pull keeps the furthest cross-device position");
     return true;
 }

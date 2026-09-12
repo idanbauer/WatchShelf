@@ -4,13 +4,9 @@ using Toybox.System;
 // The two-way progress exchange, run as one bounded, SEQUENTIAL chain inside a
 // sync (SyncDelegate.onStartSync). Order matters:
 //
-//   1. PULL every downloaded book's position from ABS and last-write-wins merge
-//      it locally. This picks up a position set on another device AND resolves
-//      conflicts BEFORE we push - ABS's PATCH is a blind write, so pushing a
-//      stale offline listen first could clobber a newer position from the phone.
-//   2. PUSH whatever is still dirty after the merge (i.e. a genuinely newer
-//      local listen), stamped with the watch's own listen time so other devices
-//      order it correctly.
+//   1. PULL every downloaded book's position from ABS and keep whichever side
+//      is furthest along.
+//   2. PUSH any farther watch position left dirty by that merge.
 //
 // One request at a time - same discipline as the download engine - so it never
 // stacks requests into the 512KB sync heap. It runs as the FINAL step of a sync

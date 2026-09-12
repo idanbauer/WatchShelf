@@ -97,28 +97,24 @@ class BookMenuDelegate extends WatchUi.Menu2InputDelegate {
             return;
         }
 
-        // /files carries the user's ABS position. Merge it into the same LWW
-        // store playback uses, then choose the local winner below. A finished
+        // /files carries the user's ABS position. Merge it into the same
+        // furthest-position store playback uses, then choose the winner below.
+        // A finished
         // winner means the user selected this title from All books for a reread:
         // download from chunk 0 and hide Resume, never map its end cursor back to
-        // the final part. A genuinely newer local rewind still wins an equal or
-        // older server finish.
+        // the final part.
         var remoteProgress = data["progress"];
         var localProgress = Progress.get(itemId);
         var forceFull = Progress.entryFinished(localProgress);
         if (remoteProgress != null) {
             if (remoteProgress["isFinished"] == true) {
-                var remoteTs = remoteProgress["lastUpdate"];
-                if ((localProgress == null) ||
-                    ((remoteTs != null) && (remoteTs > localProgress[1]))) {
-                    var finishedPull = AbsApi.readProgress(remoteProgress);
-                    if (finishedPull != null) {
-                        Progress.mergeServer(itemId, finishedPull[0],
-                            finishedPull[1], finishedPull[2]);
-                        localProgress = Progress.get(itemId);
-                    }
-                    forceFull = true;
+                var finishedPull = AbsApi.readProgress(remoteProgress);
+                if (finishedPull != null) {
+                    Progress.mergeServer(itemId, finishedPull[0],
+                        finishedPull[1], finishedPull[2]);
+                    localProgress = Progress.get(itemId);
                 }
+                forceFull = true;
             } else {
                 var pulled = AbsApi.readProgress(remoteProgress);
                 if (pulled != null) {
