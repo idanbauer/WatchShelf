@@ -56,3 +56,26 @@ function progressRestartIsOrdinaryWrite(logger) {
     logger.debug("completed-book restart uses a normal position write");
     return true;
 }
+
+(:test)
+function progressPullBeforeResumePreservesNewestPosition(logger) {
+    var itemId = "__watchshelf_test_resume_pull__";
+    Progress.remove(itemId);
+
+    Progress.record(itemId, 120, 10, false);
+    Progress.markClean(itemId, 10, 120, false);
+    Progress.mergeServer(itemId, 360, 20, false);
+    var e = Progress.get(itemId);
+    Test.assertEqual(e[0], 360);
+    Test.assertMessage(!e[2], "newer server progress should be clean");
+
+    Progress.record(itemId, 420, 30, false);
+    Progress.mergeServer(itemId, 360, 20, false);
+    e = Progress.get(itemId);
+    Test.assertEqual(e[0], 420);
+    Test.assertMessage(e[2], "newer offline watch progress should remain dirty");
+
+    Progress.remove(itemId);
+    logger.debug("resume pull keeps the newest cross-device position");
+    return true;
+}

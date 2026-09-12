@@ -30,20 +30,25 @@ class BookActionMenu extends WatchUi.Menu2 {
 class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
 
     private var mItemId;
+    private var mLaunching;
+    private var mCancelled;
 
     function initialize(itemId) {
         Menu2InputDelegate.initialize();
         mItemId = itemId;
+        mLaunching = false;
+        mCancelled = false;
     }
 
     function onSelect(item) {
+        if (mLaunching) { return; }
         var id = item.getId();
 
         // Resume from the synced position; Play from start begins at 0. Both pass
         // the book id + mode to the native player, which launches playback mode
         // and hands the args to our ContentDelegate/ContentIterator.
         if ((id instanceof Toybox.Lang.String) && id.equals("resume")) {
-            launchPlayback("resume");
+            resumePlayback();
             return;
         }
         if ((id instanceof Toybox.Lang.String) && id.equals("start")) {
@@ -61,6 +66,35 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
         }
     }
 
+    // Pull before playback records a fresh local timestamp. This lets the
+    // existing last-write-wins merge see progress made on another device.
+    function resumePlayback() {
+        if (!AbsApi.isConfigured()) {
+            launchPlayback("resume");
+            return;
+        }
+        mLaunching = true;
+        Notify.flash(Rez.Strings.syncing);
+        try {
+            AbsApi.getProgress(mItemId, method(:onResumeProgress));
+        } catch (e) {
+            mLaunching = false;
+            launchPlayback("resume");
+        }
+    }
+
+    function onResumeProgress(code, data) {
+        if (mCancelled) { return; }
+        if (code == 200) {
+            var pulled = AbsApi.readProgress(data);
+            if (pulled != null) {
+                Progress.mergeServer(mItemId, pulled[0], pulled[1], pulled[2]);
+            }
+        }
+        mLaunching = false;
+        launchPlayback("resume");
+    }
+
     function launchPlayback(mode) {
         // The native player can retain its current cached Content when this
         // provider is already active, even though startPlayback supplies a new
@@ -73,6 +107,7 @@ class BookActionMenuDelegate extends WatchUi.Menu2InputDelegate {
     }
 
     function onBack() {
+        mCancelled = true;
         WatchUi.popView(WatchUi.SLIDE_RIGHT);
     }
 }
