@@ -119,12 +119,19 @@ class SyncDelegate extends Communications.SyncDelegate {
         mProgressSync.start(method(:onProgressDone));
     }
 
-    function onProgressDone() {
+    function onProgressDone(progressError) {
+        if ((mSyncError == null) && (progressError != null)) {
+            mSyncError = progressError;
+            try {
+                Application.Storage.setValue(Store.LAST_SYNC_ERROR, progressError);
+            } catch (e) {
+                System.println("progress error save failed: " + e.getErrorMessage());
+            }
+        }
         // Report a download error (if any) only now - AFTER the progress exchange
         // has had its chance to flush a dirty offline listen. null on a clean sync.
-        // Do not clear a useful prior error after a no-op/force-progress sync;
-        // clear it only when real download/delete work completed cleanly.
-        if ((mSyncError == null) && (mDone > 0)) {
+        // A successful later sync clears the previous failure indicator.
+        if (mSyncError == null) {
             Application.Storage.deleteValue(Store.LAST_SYNC_ERROR);
         }
         Communications.notifySyncComplete(mSyncError);

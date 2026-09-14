@@ -40,8 +40,6 @@ class BookMenuDelegate extends WatchUi.Menu2InputDelegate {
     }
 
     function onFiles(itemId, code, data) {
-        // Session expired -> re-login instead of a dead-end error.
-        if (code == 401) { Login.reauth(); return; }
         if (code != 200 || data == null) {
             WatchUi.pushView(new ErrorView(Errors.message(Rez.Strings.errDetail, code)),
                 new ErrorViewDelegate(), WatchUi.SLIDE_LEFT);

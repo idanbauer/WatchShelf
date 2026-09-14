@@ -20,6 +20,9 @@ module Errors {
 
     // A short, actionable hint for a code we recognise, or null otherwise.
     function hint(code) {
+        if (code == 401) {
+            return WatchUi.loadResource(Rez.Strings.errSession);
+        }
         if (code == -104) {
             return WatchUi.loadResource(Rez.Strings.errPhone);
         }
@@ -49,7 +52,7 @@ module Errors {
         if (code == -402) { return "Audio response was too large"; }
         if (code == -403) { return "Not enough watch memory"; }
         if (code == 400) { return "WatchShelf sidecar needs updating"; }
-        if (code == 401) { return "Session expired; open Browse library"; }
+        if (code == 401) { return "Session unavailable; retry or log out"; }
         if (code == 403) { return "Enable Download permission in Audiobookshelf"; }
         if (code == 404) { return "Book audio was not found"; }
         if (code == 502) { return "Sidecar could not transcode audio"; }
@@ -61,5 +64,11 @@ module Errors {
     // null data (a malformed media response rather than a successful transfer).
     function downloadMessage(code) {
         return downloadHint(code) + " (" + code + ")";
+    }
+
+    function progressMessage(code) {
+        var h = hint(code);
+        var base = (h != null) ? h : "Progress sync failed";
+        return base + " (" + code + ")";
     }
 }

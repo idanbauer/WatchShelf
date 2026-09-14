@@ -26,12 +26,16 @@ class ProgressSync {
     private var mCurPos;
     private var mCurFinished;
     private var mCb;
+    private var mPulled;
+    private var mError;
 
     function initialize() {
         mPulls = [];
         mPushes = [];
         mPhase = 0;
         mIdx = 0;
+        mPulled = {};
+        mError = null;
     }
 
     function start(cb) {
@@ -52,7 +56,10 @@ class ProgressSync {
             if (mPhase == 0) {
                 if (mIdx >= mPulls.size()) {
                     // Pulls done: NOW compute what remains dirty and push it.
-                    mPushes = Progress.dirtyIds();
+                    var dirty = Progress.dirtyIds();
+                    for (var i = 0; i < dirty.size(); ++i) {
+                        if (mPulled[dirty[i]] == true) { mPushes.add(dirty[i]); }
+                    }
                     mPhase = 1;
                     mIdx = 0;
                     step();
@@ -82,8 +89,13 @@ class ProgressSync {
                 finishValue, method(:onPushDone));
         } catch (ex) {
             System.println("ProgressSync step failed: " + ex.getErrorMessage());
+            if (mError == null) { mError = "Progress sync failed"; }
             // Never let a progress hiccup strand the sync - advance regardless.
-            if (mPhase == 0 && mIdx >= mPulls.size()) { mPushes = []; }
+            if (mPhase == 0 && mIdx >= mPulls.size()) {
+                mPushes = [];
+                mPhase = 1;
+                mIdx = 0;
+            }
             step();
         }
     }
@@ -91,14 +103,18 @@ class ProgressSync {
     function onPullDone(code, data) {
         try {
             if (code == 200) {
+                mPulled[mCurId] = true;
                 var pr = AbsApi.readProgress(data); // [posSec, tsSec, finished] or null
                 if (pr != null) {
                     var finished = (pr.size() > 2) ? pr[2] : null;
                     Progress.mergeServer(mCurId, pr[0], pr[1], finished);
                 }
+            } else if (mError == null) {
+                mError = Errors.progressMessage(code);
             }
         } catch (ex) {
             System.println("ProgressSync pull failed: " + ex.getErrorMessage());
+            if (mError == null) { mError = "Progress sync failed"; }
         }
         step();
     }
@@ -117,6 +133,9 @@ class ProgressSync {
             Progress.markClean(mCurId, mCurTs, mCurPos, mCurFinished);
         }
         else { System.println("ProgressSync push failed: " + code); }
+        if ((code != 200) && (mError == null)) {
+            mError = Errors.progressMessage(code);
+        }
         step();
     }
 
@@ -124,7 +143,7 @@ class ProgressSync {
         if (mCb != null) {
             var cb = mCb;
             mCb = null;
-            cb.invoke();
+            cb.invoke(mError);
         }
     }
 }

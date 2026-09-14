@@ -28,8 +28,6 @@ module Browse {
 
     // Build + push a book menu from { books:[{id,title,author}] }.
     function showBooks(code, data) {
-        // Session expired -> re-login instead of a dead-end error.
-        if (code == 401) { Login.reauth(); return; }
         if (code != 200 || data == null || data["books"] == null) {
             WatchUi.pushView(new ErrorView(Errors.message(Rez.Strings.errItems, code)),
                 new ErrorViewDelegate(), WatchUi.SLIDE_LEFT);
@@ -71,7 +69,9 @@ class BrowseDelegate extends WatchUi.Menu2InputDelegate {
 
     function pushGroups(code, data, key, filterType) {
         if (code != 200 || data == null || data[key] == null || data[key].size() == 0) {
-            WatchUi.pushView(new ErrorView(WatchUi.loadResource(Rez.Strings.errNone)), new ErrorViewDelegate(), WatchUi.SLIDE_LEFT);
+            var message = (code == 200) ? WatchUi.loadResource(Rez.Strings.errNone)
+                : Errors.message(Rez.Strings.errItems, code);
+            WatchUi.pushView(new ErrorView(message), new ErrorViewDelegate(), WatchUi.SLIDE_LEFT);
             return;
         }
         var groups = data[key];
